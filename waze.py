@@ -1,4 +1,3 @@
-import math
 import requests
 from typing import List, Optional
 from json import JSONDecodeError
@@ -37,11 +36,19 @@ class ETAHistogramItem(BaseModel):
     text: str
 
 
+class Alert(BaseModel):
+    id: int
+    type: str
+    subtype: str
+    location: Coordinate
+
+
 class WazeTravelPlan(BaseModel):
     src: Coordinate
     dst: Coordinate
     routeName: str
     geoPath: List[Coordinate]
+    alerts: List[Alert]
     totalSeconds: int  # estimated journey time in seconds
     totalLength: int  # distance in meters
     isToll: bool
@@ -83,7 +90,7 @@ def get_route_plan(src: Coordinate, dst: Coordinate) -> WazeTravelPlan:
 
     # parsing the response
     if not response.ok:
-        raise ValueError(f"API request failed:\n{response.status_code}")
+        raise ValueError(f"Server error:\n{response.status_code}")
     try:
         r = response.json()
     except JSONDecodeError as exc:
@@ -110,11 +117,8 @@ if __name__ == "__main__":
 
     # SG
     star_vista = Coordinate(latitude=1.3068, longitude=103.7884)
-    tuas = Coordinate(latitude=1.336450, longitude=103.647072)
 
     # MY
-    kajang = Coordinate(latitude=2.993518, longitude=101.787407)
-    georgetown = Coordinate(latitude=5.416393, longitude=100.332680)
     subang_parade = Coordinate(latitude=3.0815, longitude=101.5851)
 
     plan = get_route_plan(src=star_vista, dst=subang_parade)
@@ -122,4 +126,4 @@ if __name__ == "__main__":
     distance = plan.totalLength / 1000
 
     print(f"{distance} km")
-    print(f"{math.floor(hr)} hours and {hr % math.floor(hr) * 60:.0f} minutes")
+    print(f"{int(hr)} hours and {hr % int(hr) * 60:.0f} minutes")
