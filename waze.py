@@ -52,8 +52,9 @@ class WazeTravelPlan(BaseModel):
     totalSeconds: int  # estimated journey time in seconds
     totalLength: int  # distance in meters
     isToll: bool
+    isFastest: bool
     tollPriceInfo: TollPriceItem
-    etaHistograms: List[ETAHistogramItem]
+    etaHistograms: Optional[List[ETAHistogramItem]] = Field(default=None)
 
 
 API_URL = "https://www.waze.com/live-map/api/user-drive?geo_env=row"
