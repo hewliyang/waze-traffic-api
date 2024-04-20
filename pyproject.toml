@@ -1,0 +1,28 @@
+[tool.poetry]
+name = "waze-traffic-api"
+version = "0.1.0"
+description = "A light wrapper around the public facing Waze API's"
+authors = ["hewliyang <hewliyang@u.nus.edu>"]
+readme = "README.md"
+packages = [{ include = "waze" }]
+
+[tool.poetry.dependencies]
+python = "^3.9"
+pydantic = "^2.7.0"
+requests = "^2.31.0"
+
+
+[tool.poetry.group.dev.dependencies]
+ruff = "^0.3.7"
+ipykernel = "^6.29.4"
+mypy = "^1.9.0"
+pytest = "^8.1.1"
+matplotlib = "^3.8.4"
+geopandas = "^0.14.3"
+
+[tool.ruff]
+line-length = 88
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

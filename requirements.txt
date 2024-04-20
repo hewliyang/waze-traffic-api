@@ -1,9 +1,0 @@
-# minimally
-
-requests
-pydantic
-
-# for the notebook
-ipykernel
-geopandas
-matplotlib
