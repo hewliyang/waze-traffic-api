@@ -1,8 +1,10 @@
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 from typing import Any, Dict, List, Literal, Optional, Union
 
 from .logger import get_logger
-from .utils import get_feasible_search_area
+from .utils import get_search_bbox
 
 from .models import (
     Coordinate,
@@ -17,13 +19,17 @@ from .models import (
 
 from .cfg import (
     BASE_URL,
-    ARBITRARY_HEADERS,
+    DEFAULT_HEADERS,
     GEOCODE_EXT,
     PLANNER_EXT,
     REVIEWS_EXT,
     VENUES_EXT,
     Countries,
 )
+
+
+class WazeHTTPError(Exception):
+    pass
 
 
 class Waze(requests.Session):
@@ -36,7 +42,9 @@ class Waze(requests.Session):
         _geocode_ext: str = GEOCODE_EXT,
         _venues_ext: str = VENUES_EXT,
         _reviews_ext: str = REVIEWS_EXT,
-        _headers: Dict[str, Any] = ARBITRARY_HEADERS,
+        _headers: Dict[str, Any] = DEFAULT_HEADERS,
+        max_retries: int = 3,
+        backoff_factor: float = 0.3,
         **session_kwargs,
     ):
         super().__init__(**session_kwargs)
@@ -48,6 +56,26 @@ class Waze(requests.Session):
         self._venues_ext = _venues_ext
         self._reviews_ext = _reviews_ext
         self._headers = _headers
+
+        # Configure retry strategy
+        retry_strategy = Retry(
+            total=max_retries,
+            backoff_factor=backoff_factor,
+            status_forcelist=[429, 500, 502, 503, 504],
+            allowed_methods=["HEAD", "GET", "OPTIONS", "POST"],
+        )
+        adapter = HTTPAdapter(max_retries=retry_strategy)
+        self.mount("https://", adapter)
+        self.mount("http://", adapter)
+
+    def _make_request(self, method: str, url: str, **kwargs) -> requests.Response:
+        try:
+            response = self.request(method, url, **kwargs)
+            response.raise_for_status()
+            return response
+        except requests.RequestException as e:
+            self.logger.error(f"HTTP request failed: {e}")
+            raise WazeHTTPError(f"HTTP request failed: {e}") from e
 
     def _infer_locale(self) -> None:
         if not self.locale:
@@ -65,81 +93,66 @@ class Waze(requests.Session):
     ) -> WazeGeocodeParams:
         return {
             "q": query,
-            "v": f"{viewbox.x1},{viewbox.y1};{viewbox.x2},{viewbox.y2}",
+            "v": f"{viewbox.lat1},{viewbox.long1};{viewbox.lat2},{viewbox.long2}",
             "exp": "8,10,12",
+            "geo-env": "row",
             "lang": "en",
         }
 
-    def geocode(self, query: str, radius: int = 1_000) -> List[WazeLocation]:
-        # if no locale specified, raise error
-        # cannot geocode without a proximate locality
-        if not self.locale or isinstance(self.locale, Countries):
-            self._infer_locale()
-
+    def geocode(self, query: str, radius: int = 100) -> List[WazeLocation]:
+        self._infer_locale()
         params = self._prepare_geocode_params(
-            query=query, viewbox=get_feasible_search_area(self.locale, radius)
+            query=query, viewbox=get_search_bbox(self.locale, radius)
         )
-
         self.logger.info(
             f"[geocode] Making request with the following parameters:\n{params}"
         )
 
-        resp = self.get(url=self._base_url + self._geocode_ext, params=params)
-        if not resp.ok:
-            raise requests.HTTPError(f"Server returned {resp.status_code}\n{resp.text}")
-
-        resp = resp.json()
-        return [WazeLocation(**o) for o in resp]
+        response = self._make_request(
+            "GET", self._base_url + self._geocode_ext, params=params
+        )
+        return [WazeLocation(**o) for o in response.json()]
 
     def venue(self, location: Union[WazeLocation, str]) -> WazeVenue:
-        resp = self.get(
-            url=self._base_url
-            + self._venues_ext
-            + f"/{location.venueId.replace('venues.', '')}"
+        venue_id = (
+            location.venueId.replace("venues.", "").replace("googlePlaces.", "")
+            if isinstance(location, WazeLocation)
+            else location
         )
-
-        if not resp.ok:
-            raise requests.HTTPError(f"Server returned {resp.status_code}\n{resp.text}")
-
-        resp = resp.json()
-        return WazeVenue(**resp)
+        response = self._make_request(
+            "GET", f"{self._base_url}{self._venues_ext}/{venue_id}"
+        )
+        return WazeVenue(**response.json())
 
     def reviews(self, venue: WazeVenue) -> List[WazeReview]:
-        resp = self.get(
-            url=self._base_url + self._reviews_ext + f"/{venue.googlePlaceId}"
-        )
-
-        if not resp.ok:
-            # in this case there aren't any reviews
-            if resp.status_code == 500:
+        try:
+            response = self._make_request(
+                "GET", f"{self._base_url}{self._reviews_ext}/{venue.googlePlaceId}"
+            )
+            return WazeReview(**response.json())
+        except WazeHTTPError as e:
+            if "500" in str(e):
+                self.logger.info("No reviews found for this venue.")
                 return []
-            raise requests.HTTPError(f"Server returned {resp.status_code}\n{resp.text}")
-
-        resp = resp.json()
-        return WazeReview(**resp)
+            raise
 
     def plan(self, src: Coordinate, dst: Coordinate) -> WazeTravelPlan:
-        # make the POST request
-        params = WazeRequestBody(from_=src, to=dst)  # type: ignore
+        params = WazeRequestBody(from_=src, to=dst)
         self.logger.info(
-            f"[plan] Making request with the following parameters:\n"
-            f"{params.model_dump(by_alias=True)}"
+            f"[plan] Making request with the following parameters:\n{params.model_dump(by_alias=True)}"
         )
 
-        resp = self.post(
-            url=self._base_url + self._planner_ext,
+        response = self._make_request(
+            "POST",
+            self._base_url + self._planner_ext,
             headers=self._headers,
             json=params.model_dump(by_alias=True),
         )
 
-        # parsing the response
-        if not resp.ok:
-            raise requests.HTTPError(f"Server returned {resp.status_code}\n{resp.text}")
-
-        resp = resp.json()
-        alternatives = resp.get("alternatives")
+        resp_json = response.json()
+        alternatives = resp_json.get("alternatives")
         if not alternatives:
-            raise ValueError(f"Response is empty:\n{resp}")
+            raise ValueError(f"Response is empty:\n{resp_json}")
 
         assert len(alternatives) == params.nPaths, "Only get the fastest route (1)"
         route = alternatives[0]

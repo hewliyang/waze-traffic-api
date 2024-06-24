@@ -1,11 +1,11 @@
-from math import cos, radians
+import math
 from functools import partial
 from .models import ViewBox, Coordinate
 
-round_to_7_dp = partial(round, ndigits=7)
+sevendp = partial(round, ndigits=7)
 
 
-def get_feasible_search_area(point: Coordinate, radius: int = 1_000) -> ViewBox:
+def get_search_bbox(point: Coordinate, radius: int = 100) -> ViewBox:
     """Computes a rectangular feasible search area around
     user locale of `radius` kilometers.
 
@@ -20,13 +20,18 @@ def get_feasible_search_area(point: Coordinate, radius: int = 1_000) -> ViewBox:
         ViewBox: Object containing bounding box coords
     """
 
-    EARTH_RADIUS = 6371
-    lat_delta = radius / EARTH_RADIUS
-    lon_delta = radius / (EARTH_RADIUS * cos(radians(point.latitude)))
+    EARTH_RADIUS_KM = 6371.0
+    radius_radians = radius / EARTH_RADIUS_KM
+    lat_radians = math.radians(point.latitude)
+    lon_radians = math.radians(point.longitude)
+    min_lat = lat_radians - radius_radians
+    max_lat = lat_radians + radius_radians
+    min_lon = lon_radians - radius_radians / math.cos(lat_radians)
+    max_lon = lon_radians + radius_radians / math.cos(lat_radians)
 
     return ViewBox(
-        x1=round_to_7_dp(point.latitude - lat_delta),
-        y1=round_to_7_dp(point.longitude - lon_delta),
-        x2=round_to_7_dp(point.latitude + lat_delta),
-        y2=round_to_7_dp(point.longitude + lon_delta),
+        long1=sevendp(math.degrees(min_lon)),
+        lat1=sevendp(math.degrees(min_lat)),
+        long2=sevendp(math.degrees(max_lon)),
+        lat2=sevendp(math.degrees(max_lat)),
     )

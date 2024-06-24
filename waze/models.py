@@ -67,10 +67,10 @@ class WazeTravelPlan(BaseModel):
 
 
 class ViewBox(BaseModel):
-    x1: float
-    y1: float
-    x2: float
-    y2: float
+    long1: float
+    lat1: float
+    long2: float
+    lat2: float
 
 
 class WazeLocation(BaseModel):

@@ -8,22 +8,12 @@ GEOCODE_EXT = "autocomplete"
 VENUES_EXT = "venues"
 REVIEWS_EXT = "venues/reviews"
 
-ARBITRARY_HEADERS = {
+DEFAULT_HEADERS = {
     "Accept": "/_/",
     "Accept-Language": "en-US,en;q=0.9",
     "Content-Type": "application/json; charset=UTF-8",
     "Origin": "https://www.waze.com",
-    "Referer": "https://www.waze.com/live-map/directions?from="
-    "place.w.68091917.680722562.2874558",
-    "Sec-Ch-Ua": '"Microsoft Edge";v="123", "Not:A-Brand";v="8", "Chromium";v="123"',
-    "Sec-Ch-Ua-Mobile": "?1",
-    "Sec-Ch-Ua-Platform": '"Android"',
-    "Sec-Fetch-Dest": "empty",
-    "Sec-Fetch-Mode": "cors",
-    "Sec-Fetch-Site": "same-origin",
-    "User-Agent": "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 "
-    "(KHTML, like Gecko) Chrome/116.0.0.0 Mobile Safari/537.36 "
-    "Edg/123.0.0.0",
+    "Referer": "https://www.waze.com/live-map/directions?from=",
 }
 
 
